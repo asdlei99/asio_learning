@@ -2,11 +2,10 @@
 //
 
 #include "pch.h"
-#include <asio.hpp>
-#include <iostream>
 
 ///1
 asio::io_service io_service;
+asio::io_context::strand io_strand(io_service);
 ///2
 asio::ip::tcp::resolver resolver(io_service);
 asio::ip::tcp::socket sock(io_service);
@@ -57,7 +56,6 @@ void resolve_handler(const asio::error_code &ec, asio::ip::tcp::resolver::iterat
 ///3
 void write_handler(const asio::error_code &ec, std::size_t bytes_transferred)
 {
-
 }
 
 void accept_handler(const asio::error_code &ec)
@@ -68,12 +66,28 @@ void accept_handler(const asio::error_code &ec)
 	}
 }
 
+///4
+void timer(const asio::error_code& ec, asio::steady_timer* t)
+{
+	static unsigned i = 0;
+	std::cout << "i = " << i << std::endl;
+	if (i++ < 5)
+	{
+		t->expires_at(t->expiry() + std::chrono::seconds(1));
+		t->async_wait(std::bind(timer, std::placeholders::_1, t));
+	}
+}
+
 int main1()
 {
 	asio::steady_timer timer1(io_service, asio::chrono::seconds(5));
 	asio::steady_timer timer2(io_service, asio::chrono::seconds(5));
-	timer1.async_wait(handler);
-	timer2.async_wait(handler);
+	// strand提供串行执行, 能够保证线程安全, 同时被post或dispatch的方法, 不会被并发的执行. 
+	// io_service不能保证线程安全
+	//timer1.async_wait(handler);
+	//timer2.async_wait(handler);
+	timer1.async_wait(asio::bind_executor(io_strand, handler));
+	timer2.async_wait(asio::bind_executor(io_strand, handler));
 	///run()是阻塞的。
 	///因此调用 run() 后程序执行会停止。 
 	///具有讽刺意味的是，许多操作系统只是通过阻塞函数来支持异步操作。
@@ -86,14 +100,16 @@ int main1()
 		th1.join();
 	if (th2.joinable())
 		th2.join();
+	///The asio library provides a guarantee that callback handlers will only be called from threads that are currently calling io_context::run().
+	///Therefore unless the io_context::run() function is called the callback for the asynchronous wait completion will never be invoked.
 	//io_service.run();
 
 	return 0;
 }
 
-int main()
+int main2()
 {
-	asio::ip::tcp::resolver::query query("127.0.0.1", "80");
+	asio::ip::tcp::resolver::query query("www.highscore.de", "80");
 	resolver.async_resolve(query, resolve_handler/*一旦域名解析成功或被某个错误中断被调用*/);
 	io_service.run();
 
@@ -108,3 +124,20 @@ int main3()
 
 	return 0;
 }
+
+int main4()
+{
+	asio::steady_timer t(io_service, asio::chrono::seconds(1));
+	t.async_wait(std::bind(timer, std::placeholders::_1, &t));
+	io_service.run();
+
+	return 0;
+}
+
+//int main()
+//{
+//	//main1();
+//	//main2();
+//	//main3();
+//	//main4();
+//}

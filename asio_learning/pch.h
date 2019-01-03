@@ -10,10 +10,25 @@
 #define PCH_H
 
 // TODO: 添加要在此处预编译的标头
+#define _CRT_SECURE_NO_WARNINGS
 // Windows使用asio源码，不使用boost
 // https://blog.csdn.net/qq_29846883/article/details/71515435
+///#define ASIO_NO_WIN32_LEAN_AND_MEAN
 #include <WinSock2.h>
 #include <Windows.h> /* #define _WIN32_WINNT */
 #define ASIO_STANDALONE /* 单独使用asio */
+
+#include <asio.hpp>
+
+#include <iostream>
+#include <iomanip> //std::put_time
+inline std::string make_daytime_string()
+{
+	auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	static std::stringstream ss;
+	ss.str("");
+	ss << std::put_time(std::localtime(&t), "%Y年%m月%d日 %H点%M分%S秒");
+	return ss.str();
+}
 
 #endif //PCH_H
